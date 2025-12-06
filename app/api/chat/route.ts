@@ -1,24 +1,24 @@
+// app/api/chat/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
-import { HarmBlockThreshold, HarmCategory } from '@google/generative-ai';
-import { AIMessage, HumanMessage } from '@langchain/core/messages';
-import { BytesOutputParser } from '@langchain/core/output_parsers';
-import { getDocuments, getDocumentPath } from '@/lib/store';
-import fs from 'fs/promises';
+import { getDocuments, getSettings } from '@/lib/store';
+import genAI from '@/lib/gemini-client';
+import { Content, FileDataPart } from '@google/genai';
 
-async function loadContextFromDocuments(): Promise<string> {
-  const docMetas = await getDocuments();
-  let context = '';
-  for (const meta of docMetas) {
-    try {
-      const filePath = getDocumentPath(meta.filename);
-      const content = await fs.readFile(filePath, 'utf-8');
-      context += `--- Document: ${meta.name} ---\n${content}\n\n`;
-    } catch (error) {
-      console.error(`Failed to load document: ${meta.filename}`, error);
-    }
-  }
-  return context;
+// Function to convert the async generator to a ReadableStream
+function iteratorToStream(iterator: AsyncGenerator<any>) {
+  return new ReadableStream({
+    async pull(controller) {
+      const { value, done } = await iterator.next();
+      if (done) {
+        controller.close();
+      } else {
+        // Assuming value is a chunk of data, like a string or Uint8Array
+        // The SDK likely returns objects with a `text` property or similar
+        const chunk = value?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        controller.enqueue(new TextEncoder().encode(chunk));
+      }
+    },
+  });
 }
 
 export async function POST(req: NextRequest) {
@@ -34,33 +34,48 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Last message must be from user' }, { status: 400 });
     }
 
-    const model = new ChatGoogleGenerativeAI({
-      model: 'gemini-2.5-flash-lite',
-      maxOutputTokens: 2048,
-      safetySettings: [
-        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE },
-      ],
+    const settings = await getSettings();
+    const documents = await getDocuments();
+
+    // Filter for documents that have been synced
+    const syncedDocuments = documents.filter(doc => doc.googleFileUri);
+    const fileDataParts: FileDataPart[] = syncedDocuments.map(doc => ({
+        fileData: {
+            mimeType: doc.mimeType,
+            fileUri: doc.googleFileUri!,
+        }
+    }));
+
+
+    const model = genAI.getGenerativeModel({
+        model: settings.modelName,
+        systemInstruction: settings.systemInstruction,
     });
 
-    const context = await loadContextFromDocuments();
-    const systemPrompt = `You are a helpful assistant. Answer the user's questions based on the following context:\n\n${context}`;
-
-    const chatHistory = messages.slice(0, -1).map((msg: any) =>
-        msg.role === 'user' ? new HumanMessage(msg.content) : new AIMessage(msg.content)
-    );
-
-    const fullPrompt = [
-        new HumanMessage(systemPrompt),
-        ...chatHistory,
-        new HumanMessage(lastMessage.content)
+    // Construct the full prompt including chat history and file context
+    const contents: Content[] = [
+        ...messages.map((msg: { role: string; content: string; }) => ({
+            role: msg.role === 'user' ? 'user' : 'model',
+            parts: [{ text: msg.content }]
+        })),
     ];
 
-    const outputParser = new BytesOutputParser();
-    const stream = await model.pipe(outputParser).stream(fullPrompt);
+    // Add file data to the last user message
+    if (fileDataParts.length > 0) {
+        const lastUserContent = contents[contents.length - 1];
+        if(lastUserContent.role === 'user') {
+            lastUserContent.parts.push(...fileDataParts);
+        }
+    }
 
-    return new Response(stream, {
+
+    const stream = await model.generateContentStream({ contents });
+    const readableStream = iteratorToStream(stream);
+
+    return new Response(readableStream, {
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
+        'Transfer-Encoding': 'chunked',
       },
     });
 

@@ -9,11 +9,13 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@google/genai": "^1.31.0",
     "@langchain/core": "^1.1.4",
     "@langchain/google-genai": "^2.0.4",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "dotenv": "^17.2.3",
+    "file-type": "^21.1.1",
     "framer-motion": "^12.23.25",
     "gray-matter": "^4.0.3",
     "langchain": "^1.1.5",
