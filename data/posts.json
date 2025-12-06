@@ -1,1 +1,12 @@
-[]
+[
+  {
+    "id": "post_1733471419428",
+    "title": "My First Post",
+    "slug": "my-first-post",
+    "content": "This is the content of my first post. Welcome to the blog!",
+    "excerpt": "A short look at my first post.",
+    "published": true,
+    "publishedAt": "2025-12-06T08:10:19.428Z",
+    "createdAt": "2025-12-06T08:10:19.428Z"
+  }
+]
