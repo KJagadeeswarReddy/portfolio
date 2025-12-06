@@ -4,6 +4,7 @@ import path from 'path';
 const DATA_DIR = path.join(process.cwd(), 'data');
 const POSTS_FILE = path.join(DATA_DIR, 'posts.json');
 const DOCS_FILE = path.join(DATA_DIR, 'documents.json');
+const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 const DOCS_DIR = path.join(DATA_DIR, 'documents');
 
 export interface BlogPost {
@@ -22,6 +23,11 @@ export interface DocumentMeta {
   name: string;
   filename: string;
   createdAt: string;
+}
+
+export interface AgentSettings {
+  systemInstruction: string;
+  modelName: string;
 }
 
 // Ensure data directory exists
@@ -95,4 +101,21 @@ export async function deleteDocument(id: string): Promise<void> {
 
 export function getDocumentPath(filename: string): string {
   return path.join(DOCS_DIR, filename);
+}
+
+// --- Agent Settings ---
+
+export async function getSettings(): Promise<AgentSettings> {
+  if (!fs.existsSync(SETTINGS_FILE)) {
+    return {
+      systemInstruction: 'You are a helpful assistant.',
+      modelName: 'gemini-1.5-flash-latest',
+    };
+  }
+  const data = fs.readFileSync(SETTINGS_FILE, 'utf-8');
+  return JSON.parse(data);
+}
+
+export async function saveSettings(settings: AgentSettings): Promise<void> {
+  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
 }
