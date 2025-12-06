@@ -23,6 +23,8 @@ export interface DocumentMeta {
   name: string;
   filename: string;
   createdAt: string;
+  googleFileUri?: string;
+  mimeType: string;
 }
 
 export interface AgentSettings {
@@ -84,6 +86,18 @@ export async function saveDocumentMeta(doc: DocumentMeta): Promise<void> {
   const docs = await getDocuments();
   docs.push(doc);
   fs.writeFileSync(DOCS_FILE, JSON.stringify(docs, null, 2));
+}
+
+export async function updateDocumentMeta(
+  id: string,
+  updates: Partial<DocumentMeta>,
+): Promise<void> {
+  const docs = await getDocuments();
+  const index = docs.findIndex((d) => d.id === id);
+  if (index >= 0) {
+    docs[index] = { ...docs[index], ...updates };
+    fs.writeFileSync(DOCS_FILE, JSON.stringify(docs, null, 2));
+  }
 }
 
 export async function deleteDocument(id: string): Promise<void> {
